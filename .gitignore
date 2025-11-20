@@ -116,7 +116,9 @@ ipython_config.py
 #pdm.toml
 .pdm-python
 .pdm-build/
-
+backend/auth/alembic/versions/*
+backend/auth/alembic/README
+!backend/auth/alembic/versions/.gitkeep
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
 #pixi.lock

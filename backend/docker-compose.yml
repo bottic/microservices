@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: db_auth
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  gateway:
+    build: ./gateway
+    env_file: ./gateway/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth
+
+  auth:
+    build: ./auth
+    env_file: ./auth/.env
+    depends_on:
+      - postgres
+    volumes:
+      - ./auth/app:/app/app
+      - ./auth/alembic:/app/alembic
+      - ./auth/alembic.ini:/app/alembic.ini
+
+volumes:
+  pgdata:
