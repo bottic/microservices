@@ -13,6 +13,10 @@ class UserRead(BaseModel):
     class Config:
         from_attributes = True
 
+class UserChangePassword(BaseModel):
+    email: EmailStr
+    password: str
+    newPassword: str
 
 class TokenResponse(BaseModel):
     access_token: str

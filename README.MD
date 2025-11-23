@@ -1,11 +1,14 @@
 # Перед началом работы создайте фалый:
+
 - auth-config.yaml
 - gateway-config.yaml
 - postgres-secret.yaml
-## auth-config.yaml
-Пример заполнения   
 
-```
+## auth-config.yaml
+
+Пример заполнения
+
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,8 +21,10 @@ data:
   ACCESS_TOKEN_EXPIRES: "15"
   REFRESH_TOKEN_EXPIRES_DAYS: "30"
 ```
+
 ## gateway-config.yaml
-```
+
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -33,8 +38,10 @@ data:
   # CORS_ORIGINS: http://localhost:5173
   CORS_ORIGINS: http://localhost
 ```
+
 ## postgres-secret.yaml
-```
+
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -47,16 +54,27 @@ stringData:
   POSTGRES_DB: dbName
 
 ```
-# Заполните файлы 
+
+# Заполните файлы
+
 - auth/.env
 - gateway/.env
 
 # Старт
+
 Для перезапуска можно использовать restart.sh (нужны sudo права)
-```sh
-sh restart.sh
+
+```sh {"terminalRows":"16"}
+sudo usermod -aG docker $USER && newgrp docker
+
 ```
+
+```sh
+bash restart.sh
+```
+
 После выполнения файла запускаем
+
 ```bash
 kubectl port-forward svc/gateway 8000:8000 -n microservices --address 0.0.0.0
-``` 
+```

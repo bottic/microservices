@@ -14,6 +14,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserCreate,
     UserRead,
+    UserChangePassword
 )
 
 
@@ -163,3 +164,51 @@ async def refresh_tokens(
     return TokenResponse(
         access_token=access_token,
     )
+
+@router.post("/change-password", response_model=TokenResponse)
+async def change_password(
+    data: UserChangePassword,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    if user is None or not verify_password(data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+
+    # Обновляем пароль
+    user.password_hash = hash_password(data.newPassword)
+    await db.commit()
+    await db.refresh(user)
+
+    access_expires = timedelta(minutes=settings.access_token_expires_minutes)
+    refresh_expires = timedelta(days=settings.refresh_token_expires_days)
+
+    access_token = create_token(sub=str(user.id), expires_delta=access_expires)
+    refresh_token = create_token(sub=str(user.id), expires_delta=refresh_expires)
+
+    set_refresh_cookie(
+        response=response,
+        refresh_token=refresh_token,
+        max_age=int(refresh_expires.total_seconds()),
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+    )
+
+
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        httponly=True,
+        path="/auth/refresh",
+        samesite="lax",
+        secure=False,  # переключите на True в проде за HTTPS
+    )
+    return {"detail": "Logged out"}

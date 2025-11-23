@@ -114,6 +114,54 @@ async def refresh_proxy(request: Request):
 
     return build_json_response(resp)
 
+@router.post("/auth/change-password")
+async def change_password(request: Request):
+    """
+    Прокси для смены пароля пользователя.
+    """
+    body = await request.body()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{settings.auth_service_url}/auth/change-password",
+                content=body,
+                headers={
+                    "Content-Type": request.headers.get(
+                        "content-type", "application/json"
+                    )
+                },
+                cookies=request.cookies,
+                timeout=5.0,
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(502, detail=f"Auth service unavailable: {e}")
+
+    return build_json_response(resp)
+
+@router.post("/auth/logout")
+async def logout(request: Request):
+    """
+    Удаление refresh токена (куки) при логауте.
+    """
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{settings.auth_service_url}/auth/logout",
+                headers={
+                    "Content-Type": request.headers.get(
+                        "content-type", "application/json"
+                    )
+                },
+                cookies=request.cookies,
+                timeout=5.0,
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(502, detail=f"Auth service unavailable: {e}")
+
+    return build_json_response(resp)
+
 # @router.get("/catalog/events")
 # async def list_events_proxy(request: Request):
 #     """
