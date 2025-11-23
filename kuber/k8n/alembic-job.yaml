@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-migrations
+  namespace: microservices
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: auth:v1
+          envFrom:
+            - configMapRef:
+                name: auth-config
+          command: ["alembic", "upgrade", "head"]
+  backoffLimit: 0

@@ -14,7 +14,6 @@ class UserRead(BaseModel):
         from_attributes = True
 
 
-class TokenPair(BaseModel):
+class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"

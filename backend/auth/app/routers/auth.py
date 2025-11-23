@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from jose import jwt
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, Request
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import UserCreate, UserRead, TokenPair
+from app.schemas.auth import (
+    TokenResponse,
+    UserCreate,
+    UserRead,
+)
+
+
+REFRESH_COOKIE_NAME = "refresh_token"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -34,11 +42,28 @@ def create_token(sub: str, expires_delta: timedelta) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def set_refresh_cookie(
+    response: Response,
+    refresh_token: str,
+    max_age: int,
+) -> None:
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        max_age=max_age,
+        path="/auth/refresh",
+        samesite="lax",
+        secure=False,  # переключите на True в проде за HTTPS
+    )
+
+
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register_user(
     data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    
     # Проверяем, что email уникален
     result = await db.execute(select(User).where(User.email == data.email))
     existing = result.scalar_one_or_none()
@@ -58,9 +83,10 @@ async def register_user(
     return user
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post("/login", response_model=TokenResponse)
 async def login(
     data: UserCreate,  # переиспользуем форму: email + password
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == data.email))
@@ -77,7 +103,63 @@ async def login(
     access_token = create_token(sub=str(user.id), expires_delta=access_expires)
     refresh_token = create_token(sub=str(user.id), expires_delta=refresh_expires)
 
-    return TokenPair(
-        access_token=access_token,
+    set_refresh_cookie(
+        response=response,
         refresh_token=refresh_token,
+        max_age=int(refresh_expires.total_seconds()),
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_tokens(
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+
+    try:
+        payload = jwt.decode(
+            refresh_token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+        sub = payload.get("sub")
+        if sub is None:
+            raise JWTError("Missing sub")
+        user_id = UUID(sub)
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    access_expires = timedelta(minutes=settings.access_token_expires_minutes)
+    refresh_expires = timedelta(days=settings.refresh_token_expires_days)
+
+    access_token = create_token(sub=str(user.id), expires_delta=access_expires)
+    new_refresh_token = create_token(sub=str(user.id), expires_delta=refresh_expires)
+
+    set_refresh_cookie(
+        response=response,
+        refresh_token=new_refresh_token,
+        max_age=int(refresh_expires.total_seconds()),
+    )
+
+    return TokenResponse(
+        access_token=access_token,
     )

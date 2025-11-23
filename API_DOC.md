@@ -15,7 +15,11 @@
 **Пример запроса (curl)**
 
 ```sh
-curl -X GET http://localhost:8000/healthz
+curl -X GET http://192.168.49.2/api/healthz
+```
+
+```sh
+curl -H "Host: app.local" https://192.168.1.8:8000/doc
 ```
 
 ### Регистрация и вход
@@ -23,22 +27,32 @@ curl -X GET http://localhost:8000/healthz
 | Метод | Путь | Тело запроса | Описание | Ответ |
 | --- | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ "email": "user@example.com", "password": "string" }` | Создаёт нового пользователя; валидирует уникальность email. | 201 с объектом пользователя `{ "id": "UUID", "email": "string" }`. Ошибка 400 если email уже существует. |
-| POST | `/auth/login` | `{ "email": "user@example.com", "password": "string" }` | Проверяет учетные данные и выдаёт пару токенов. | 200 с `{ "access_token": "<jwt>", "refresh_token": "<jwt>", "token_type": "bearer" }`. Ошибка 401 при неверных данных. |
+| POST | `/auth/login` | `{ "email": "user@example.com", "password": "string" }` | Проверяет учетные данные, выдаёт access и ставит refresh в HttpOnly cookie. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверных данных. |
+| POST | `/auth/refresh` | (пустое тело) | Обновляет access-токен по refresh из HttpOnly cookie (обязательно). | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и обновлённым Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверном/просроченном токене. |
 
 **Примеры запросов (curl)**
 
 ```sh
 # Регистрация
-curl -X POST http://localhost:8000/auth/register \
+curl -X POST http://192.168.49.2/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"P@ssw0rd"}'
 ```
 
 ```sh
-# Логин
-curl -X POST http://localhost:8000/auth/login \
+# 1) логин, сохранить куку
+curl -i -c cookies.txt -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"P@ssw0rd"}'
+
+# 2) обновление access с сохранённой кукой
+curl -i -b cookies.txt -X POST http://localhost:8000/auth/refresh
+
+```
+
+```sh
+# Просмотр логов аутх сервиса
+kubectl logs deploy/auth -n microservices
 ```
 
 ## Gateway Service
@@ -51,6 +65,7 @@ Gateway проксирует запросы к другим сервисам и 
 | --- | --- | --- | --- |
 | GET | `/healthz` | Проверка статуса gateway. | — |
 | POST | `/auth/login` | Пробрасывает тело запроса в Auth Service `/auth/login`; контент-тип сохраняется. | Auth Service |
+| POST | `/auth/refresh` | Пробрасывает тело и cookie в Auth Service `/auth/refresh`; возвращает Set-Cookie. | Auth Service |
 | POST | `/auth/register` | Пробрасывает тело запроса в Auth Service `/auth/register`. | Auth Service |
 | GET | `/catalog/events` | Возвращает список событий, перенося все query-параметры как есть. | Catalog Service |
 
@@ -71,4 +86,3 @@ curl -X GET http://localhost:8000/me/ping \
 ```
 
 ## Bookings Service
-
