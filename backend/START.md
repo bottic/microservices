@@ -31,3 +31,5 @@ sudo docker compose run --rm auth alembic upgrade head
 curl -X GET http://localhost:8000/healthz
 ```
 
+Чтобы сделать файл миграции нужно поднять все локально поднять постгрес и сделать миграцию
+

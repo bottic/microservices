@@ -9,7 +9,7 @@ app = FastAPI(
 )
 
 
-@app.get("/healthz")
+@app.get("/health")
 async def healthz():
     return {"status": "ok", "service": "auth"}
 

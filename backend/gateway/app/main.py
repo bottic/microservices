@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import public
-from app.routers import me 
+from app.routers import me
+from app.routers import auth 
 
 app = FastAPI(
     title="Gateway",
@@ -26,3 +27,4 @@ app.add_middleware(
 
 app.include_router(public.router, tags=["public"])
 app.include_router(me.router)
+app.include_router(auth.router, tags=["auth"])

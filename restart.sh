@@ -36,7 +36,7 @@ echo "[5/6] Restart deployments to pick new images"
 kubectl set image deploy/auth auth=auth:${IMG_TAG} -n microservices
 kubectl set image deploy/gateway gateway=gateway:${IMG_TAG} -n microservices
 kubectl rollout restart deployment/auth deployment/gateway -n microservices
-kubectl rollout status deployment/auth deployment/gateway -n microservices --timeout=60s
+
 
 echo "[6/6] Run migrations job"
 kubectl wait --for=condition=ready pod -l app=postgres -n microservices --timeout=40s

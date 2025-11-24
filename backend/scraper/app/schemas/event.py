@@ -1,0 +1,56 @@
+from datetime import datetime
+from uuid import UUID
+from typing import List, Optional
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+
+class ScrapedEvent(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    id: UUID = Field(alias="uuid")
+    title: str
+    description: str
+    price: Optional[int] = None
+    date_preview: Optional[datetime] = Field(
+        default=None,
+        validation_alias=AliasChoices("date_preview", "date_prewie"),
+    )
+    date_list: Optional[List[datetime]] = Field(
+        default=None,
+        validation_alias=AliasChoices("date_list", "date_full"),
+    )
+    place: Optional[str] = None
+    genre: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("genre", "janre"),
+    )
+    age: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("age", "raiting"),
+    )
+    image_url: Optional[str] = None
+    url: Optional[str] = None
+
+    def to_catalog_payload(self) -> dict:
+        """
+        Приводим события к формату, который ожидает scraperCatalog.
+        Даты сериализуем вручную, чтобы httpx/json не споткнулись о datetime.
+        """
+        return {
+            "uuid": str(self.id),
+            "title": self.title,
+            "description": self.description,
+            "price": self.price,
+            "date_preview": self.date_preview.isoformat() if self.date_preview else None,
+            "date_list": [d.isoformat() for d in self.date_list] if self.date_list else None,
+            "place": self.place,
+            "genre": self.genre,
+            "age": self.age,
+            "image_url": self.image_url,
+            "url": self.url,
+        }
+
+
+class ScrapedEventsBatch(BaseModel):
+    events: List[ScrapedEvent]
