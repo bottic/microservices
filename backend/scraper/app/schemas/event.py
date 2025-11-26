@@ -8,7 +8,9 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 class ScrapedEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    id: UUID = Field(alias="uuid")
+    uuid: UUID = Field(alias="uuid")
+    source_id: Optional[str] = Field(default=None, alias="id")
+    event_type: str = Field(alias="type")
     title: str
     description: str
     price: Optional[int] = None
@@ -38,7 +40,9 @@ class ScrapedEvent(BaseModel):
         Даты сериализуем вручную, чтобы httpx/json не споткнулись о datetime.
         """
         return {
-            "uuid": str(self.id),
+            "uuid": str(self.uuid),
+            "id": self.source_id,
+            "type": self.event_type,
             "title": self.title,
             "description": self.description,
             "price": self.price,

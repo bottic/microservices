@@ -8,7 +8,9 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 class EventCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    id: UUID = Field(alias="uuid")
+    uuid: UUID = Field(alias="uuid")
+    source_id: Optional[str] = Field(default=None, alias="id")
+    event_type: str = Field(validation_alias=AliasChoices("type", "event_type"))
     title: str
     description: Optional[str] = None
     price: Optional[int] = None
@@ -31,3 +33,15 @@ class EventCreate(BaseModel):
     )
     image_url: Optional[str] = None
     url: Optional[str] = None
+
+    def normalized_type(self) -> str:
+        """
+        Приводим тип к формату stand_up/standup/concert -> stand_up, без учёта регистра.
+        """
+        normalized = (
+            self.event_type.replace("-", " ")
+            .replace("_", " ")
+            .strip()
+            .lower()
+        )
+        return normalized.replace(" ", "_")

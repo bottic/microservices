@@ -15,13 +15,13 @@ async def forward_events_to_catalog(events: List[ScrapedEvent]) -> Dict[str, Any
         timeout=10.0,
     ) as client:
         for event in events:
-            event_id: UUID = event.id
+            event_id: UUID = event.uuid
             if await was_processed(event_id):
                 summary["skipped"] += 1
                 continue
 
             try:
-                resp = await client.post("/scraper/upload", json=event.to_catalog_payload())
+                resp = await client.post("/scraperCatalog/upload", json=event.to_catalog_payload())
                 if resp.is_success:
                     await mark_processed(event_id)
                     summary["sent"] += 1
