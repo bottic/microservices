@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.event import ConcertEvent, StandUpEvent
+from app.models.event import ConcertEvent, Event, StandUpEvent
 from app.schemas.event import EventCreate
 
 router = APIRouter(prefix="/scraperCatalog", tags=["scraperCatalog"])
@@ -29,11 +29,15 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
             detail=f"unsupported event type: {data.event_type}",
         )
 
-    existing = await db.scalar(select(model).where(model.uuid == data.uuid))
-    if existing:
+    existing_common = await db.scalar(select(Event).where(Event.uuid == data.uuid))
+    if existing_common:
         return {"detail": "already_exists"}
 
-    event = model(
+    existing = await db.scalar(select(model).where(model.uuid == data.uuid))
+    if existing:  # редкий случай несогласованности
+        return {"detail": "already_exists"}
+
+    common_event = Event(
         uuid=data.uuid,
         source_id=data.source_id,
         title=data.title,
@@ -49,7 +53,24 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
         url=data.url,
     )
 
-    db.add(event)
+    type_event = model(
+        uuid=data.uuid,
+        source_id=data.source_id,
+        title=data.title,
+        description=data.description,
+        price=data.price,
+        date_preview=data.date_preview,
+        date_list=data.date_list,
+        place=data.place,
+        event_type=normalized_type,
+        genre=data.genre,
+        age=data.age,
+        image_url=data.image_url,
+        url=data.url,
+    )
+
+    db.add(common_event)
+    db.add(type_event)
     await db.commit()
 
     return {"detail": "created", "type": normalized_type}

@@ -31,6 +31,13 @@ class EventMixin:
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class Event(EventMixin, Base):
+    __tablename__ = "events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_events_uuid"),
+    )
+
+
 class ConcertEvent(EventMixin, Base):
     __tablename__ = "concert_events"
     __table_args__ = (
