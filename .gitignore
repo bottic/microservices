@@ -122,6 +122,8 @@ backend/auth/alembic/README
 backend/scraperCatalog/alembic/versions/*
 backend/scraperCatalog/alembic/README
 !backend/scraperCatalog/alembic/versions/.gitkeep
+backend/scraperCatalog/app/photos/*
+!backend/scraperCatalog/app/photos/.gitkeep
 # pixi
 #   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
 #pixi.lock

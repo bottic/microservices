@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  postgres:
+  postgresAuth:
     image: postgres:16
     environment:
       POSTGRES_USER: postgres
@@ -33,11 +33,66 @@ services:
     build: ./auth
     env_file: ./auth/.env
     depends_on:
-      - postgres
+      - postgresAuth
     volumes:
       - ./auth/app:/app/app
       - ./auth/alembic:/app/alembic
       - ./auth/alembic.ini:/app/alembic.ini
 
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+  
+  postgresScraper:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: db_scrapercatalog
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata-scraper:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  scraper:
+    build: ./scraper
+    env_file: ./scraper/.env
+    depends_on: [redis, scrapercatalog]
+    # ports: ["8002:8000"]  # внешний порт/внутренний порт
+
+  scrapercatalog:
+    build: ./scraperCatalog
+    env_file: ./scraperCatalog/.env
+    depends_on: 
+      - postgresScraper
+    # ports: ["8003:8000"]
+    volumes:
+      - ./scraperCatalog/app:/app/app
+      - ./scraperCatalog/alembic:/app/alembic
+      - ./scraperCatalog/alembic.ini:/app/alembic.ini
+
+  catalog:
+    build: ./catalog
+    env_file: ./catalog/.env
+    depends_on:
+      - scrapercatalog
+    # ports: ["8001:8000"]
+    volumes:
+      - ./catalog/app:/app/app
+      - ./scraperCatalog/app/photos:/app/photos:ro
+
 volumes:
   pgdata:
+  pgdata-scraper:

@@ -3,8 +3,6 @@ from fastapi.responses import JSONResponse
 import httpx
 from app.config import settings
 
-from app.deps.auth import TokenPayload
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def build_json_response(resp: httpx.Response, content_override=None) -> JSONResponse:
@@ -85,20 +83,25 @@ async def register_proxy(request: Request):
 @router.post("/refresh")
 async def refresh_proxy(request: Request):
     """
-    Прокси для обновления access-токена по refresh в HttpOnly cookie.
+    Прокси для обновления access-токена по access-токену пользователя.
     """
     body = await request.body()
+
+    headers = {
+        "Content-Type": request.headers.get(
+            "content-type", "application/json"
+        )
+    }
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        headers["Authorization"] = auth_header
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
                 f"{settings.auth_service_url}/auth/refresh",
                 content=body,
-                headers={
-                    "Content-Type": request.headers.get(
-                        "content-type", "application/json"
-                    )
-                },
+                headers=headers,
                 cookies=request.cookies,
                 timeout=5.0,
             )
@@ -135,18 +138,23 @@ async def change_password(request: Request):
 @router.post("/logout")
 async def logout(request: Request):
     """
-    Удаление refresh токена (куки) при логауте.
+    Удаление refresh токена (куки) при логауте через access-токен.
     """
+
+    headers = {
+        "Content-Type": request.headers.get(
+            "content-type", "application/json"
+        )
+    }
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        headers["Authorization"] = auth_header
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
                 f"{settings.auth_service_url}/auth/logout",
-                headers={
-                    "Content-Type": request.headers.get(
-                        "content-type", "application/json"
-                    )
-                },
+                headers=headers,
                 cookies=request.cookies,
                 timeout=5.0,
             )

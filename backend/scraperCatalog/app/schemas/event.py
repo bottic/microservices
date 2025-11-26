@@ -36,7 +36,7 @@ class EventCreate(BaseModel):
 
     def normalized_type(self) -> str:
         """
-        Приводим тип к формату stand_up/standup/concert -> stand_up, без учёта регистра.
+        Приводим тип к формату stand_up/concert -> stand_up, без учёта регистра.
         """
         normalized = (
             self.event_type.replace("-", " ")
@@ -45,3 +45,23 @@ class EventCreate(BaseModel):
             .lower()
         )
         return normalized.replace(" ", "_")
+
+
+class EventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    uuid: UUID
+    source_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    price: Optional[int] = None
+    date_preview: Optional[datetime] = None
+    date_list: Optional[List[datetime]] = None
+    place: Optional[str] = None
+    event_type: str
+    genre: Optional[str] = None
+    age: Optional[str] = None
+    image_url: Optional[str] = None
+    url: Optional[str] = None
+    created_at: datetime

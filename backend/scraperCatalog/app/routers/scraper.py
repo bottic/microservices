@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.event import ConcertEvent, Event, StandUpEvent
 from app.schemas.event import EventCreate
+from app.services.image_downloader import ImageDownloadError, download_image
 
-router = APIRouter(prefix="/scraperCatalog", tags=["scraperCatalog"])
+router = APIRouter(prefix="/scraperCatalog", tags=["scraper"])
 
 # Какие типы отправляем в какие таблицы
 TYPE_MODEL_MAP = {
@@ -37,6 +38,17 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
     if existing:  # редкий случай несогласованности
         return {"detail": "already_exists"}
 
+    stored_image_url = data.image_url
+    if data.image_url:
+        try:
+            await download_image(data.image_url, str(data.uuid))
+            stored_image_url = f"/scraperCatalog/photos/{data.uuid}.webp"
+        except ImageDownloadError as exc:
+            raise HTTPException(
+                status_code=getattr(exc, "status_code", status.HTTP_502_BAD_GATEWAY),
+                detail=str(exc),
+            ) from exc
+
     common_event = Event(
         uuid=data.uuid,
         source_id=data.source_id,
@@ -49,7 +61,7 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
         event_type=normalized_type,
         genre=data.genre,
         age=data.age,
-        image_url=data.image_url,
+        image_url=stored_image_url,
         url=data.url,
     )
 
@@ -65,7 +77,7 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
         event_type=normalized_type,
         genre=data.genre,
         age=data.age,
-        image_url=data.image_url,
+        image_url=stored_image_url,
         url=data.url,
     )
 

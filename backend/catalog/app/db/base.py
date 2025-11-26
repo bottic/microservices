@@ -6,4 +6,4 @@ class Base(DeclarativeBase):
 
 
 # Импортируем модели, чтобы они «подвесились» на Base.metadata
-from app.models import event  # noqa: F401
+# from app.models import event  # noqa: F401

@@ -10,12 +10,12 @@
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
-| GET | `/healthz` | Проверка статуса сервиса. |
+| GET | `/health` | Проверка статуса сервиса. |
 
 **Пример запроса (curl)**
 
 ```sh
-curl -X GET http://192.168.49.2/api/healthz
+curl -X GET http://localhost:8000/health
 ```
 
 ### Регистрация, вход, пароль
@@ -24,17 +24,17 @@ curl -X GET http://192.168.49.2/api/healthz
 | --- | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ "email": "user@example.com", "password": "string" }` | Создаёт нового пользователя; валидирует уникальность email. | 201 с объектом пользователя `{ "id": "UUID", "email": "string" }`. Ошибка 400 если email уже существует. |
 | POST | `/auth/login` | `{ "email": "user@example.com", "password": "string" }` | Проверяет учетные данные, выдаёт access и ставит refresh в HttpOnly cookie. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверных данных. |
-| POST | `/auth/refresh` | (пустое тело) | Обновляет access-токен по refresh из HttpOnly cookie (обязательно). | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и обновлённым Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверном/просроченном токене. |
+| POST | `/auth/refresh` | (пустое тело) | Обновляет access-токен по заголовку `Authorization: Bearer <access_token>`; также обновляет refresh в HttpOnly cookie. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и обновлённым Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверном/просроченном токене. |
 | POST | `/auth/change-password` | `{ "email": "user@example.com", "password": "old", "newPassword": "new" }` | Проверяет старый пароль и обновляет на новый, выдаёт свежие access+refresh. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверных данных. |
-| POST | `/auth/logout` | (пустое тело) | Удаляет refresh cookie. | 200 `{ "detail": "Logged out" }`. |
+| POST | `/auth/logout` | (пустое тело) | Требует заголовок `Authorization: Bearer <access_token>`, удаляет refresh cookie. | 200 `{ "detail": "Logged out" }`. |
 
 **Примеры запросов (curl)**
 
 ```sh
 # Регистрация
-curl -X POST http://192.168.49.2/api/auth/register \
+curl -X POST http://192.168.1.8:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@exam1ple.com","password":"P@ssw0rd"}'
+  -d '{"email":"@exam1ple.com","password":"P@ssw0rd"}'
 ```
 
 ```sh
@@ -45,18 +45,21 @@ curl -X POST http://localhost:8000/auth/register \
 ```
 
 ```sh
-# 1) логин, сохранить куку
-curl -i -c backend/cookies.txt -X POST http://localhost:8000/auth/login \
+# 1) логин
+curl -i -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@exam1ple.com","password":"P@ssw0rd"}'
 
-# 2) обновление access с сохранённой кукой
-curl -i -b backend/cookies.txt -X POST http://localhost:8000/auth/refresh
+# 2) обновление access по заголовку Authorization (подставьте токен из шага 1)
+ACCESS_TOKEN="<access_token_from_login>"
+curl -i -X POST http://localhost:8000/auth/refresh \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 
 ```
 
 ```sh
-curl -i -b backend/cookies.txt -c backend/cookies.txt -X POST http://localhost:8000/auth/logout
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 
 ```
 
@@ -80,7 +83,8 @@ curl -i -b backend/cookies.txt -X POST http://localhost:8000/auth/change-passwor
 
 ```sh
 # Логаут: удаляет refresh cookie
-curl -i -b backend/cookies.txt -X POST http://localhost:8000/auth/logout
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ```sh
@@ -96,13 +100,14 @@ Gateway проксирует запросы к другим сервисам и 
 
 | Метод | Путь | Описание | Проксирует |
 | --- | --- | --- | --- |
-| GET | `/healthz` | Проверка статуса gateway. | — |
+| GET | `/health` | Проверка статуса gateway. | — |
 | POST | `/auth/login` | Пробрасывает тело запроса в Auth Service `/auth/login`; контент-тип сохраняется. | Auth Service |
-| POST | `/auth/refresh` | Пробрасывает тело и cookie в Auth Service `/auth/refresh`; возвращает Set-Cookie. | Auth Service |
+| POST | `/auth/refresh` | Пробрасывает тело и заголовок Authorization в Auth Service `/auth/refresh`; возвращает Set-Cookie. | Auth Service |
 | POST | `/auth/register` | Пробрасывает тело запроса в Auth Service `/auth/register`. | Auth Service |
 | POST | `/auth/change-password` | Пробрасывает тело и cookie в Auth Service `/auth/change-password`. | Auth Service |
-| POST | `/auth/logout` | Пробрасывает cookie в Auth Service `/auth/logout`. | Auth Service |
+| POST | `/auth/logout` | Пробрасывает заголовок Authorization в Auth Service `/auth/logout`. | Auth Service |
 | GET | `/catalog/events` | Возвращает список событий, перенося все query-параметры как есть. | Catalog Service |
+| GET/HEAD | `/scraperCatalog/photos/{path}` | Отдаёт постеры, проксируя статику scraperCatalog. | ScraperCatalog Service |
 
 ### Защищённые ручки
 
@@ -123,21 +128,24 @@ curl -X GET http://localhost:8000/me/ping \
 **Примеры запросов через gateway (curl)**
 
 ```sh
-# Логин через gateway, сохраним куки
-curl -i -c gw_cookies.txt -X POST http://localhost:8000/auth/login \
+# Логин через gateway
+curl -i -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"P@ssw0rd"}'
 
-# Обновить access по refresh из куки
-curl -i -b gw_cookies.txt -X POST http://localhost:8000/auth/refresh
+# Обновить access по заголовку Authorization
+ACCESS_TOKEN="<access_token_from_login>"
+curl -i -X POST http://localhost:8000/auth/refresh \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 
 # Сменить пароль через gateway
-curl -i -b gw_cookies.txt -X POST http://localhost:8000/auth/change-password \
+curl -i -X POST http://localhost:8000/auth/change-password \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"P@ssw0rd","newPassword":"N3wP@ss"}'
 
 # Выйти: удаляет refresh
-curl -i -b gw_cookies.txt -X POST http://localhost:8000/auth/logout
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ## Scraper Service
@@ -154,8 +162,9 @@ curl -i -b gw_cookies.txt -X POST http://localhost:8000/auth/logout
 
 | Метод | Путь | Тело запроса | Описание | Ответ |
 | --- | --- | --- | --- | --- |
-| POST | `/scraper/results` | `{ "events": [ { <событие> } ] }` | Принимает пачку событий, отправляет каждое в scraperCatalog `/scraper/upload`, кладёт `uuid` в Redis для дедупликации. | 202 с `{"sent": <int>, "skipped": <int>, "failed": [ { "uuid": "...", "status_code": int, "detail": "..." } ] }` |
+| POST | `/scraper/results` | `{ "events": [ { <событие> } ] }` | Принимает пачку событий, отправляет каждое в scraperCatalog `/scraperCatalog/upload`, кладёт `uuid` в Redis для дедупликации. | 202 с `{"sent": <int>, "skipped": <int>, "failed": [ { "uuid": "...", "status_code": int, "detail": "..." } ] }` |
 | POST | `/scraper/run` | — | Запускает встроенную логику сбора (функция `run_scrape` в `app/core/collector.py`), затем форвардит результаты как `/scraper/results`. | 202 с той же структурой ответа, что и `/scraper/results`. |
+| background | — | — | Периодический автозапуск `run_scrape` + форвардинг каждые `SCRAPE_INTERVAL_SECONDS` (env, по умолчанию 600 сек). | Логи в сервисе; ручек нет. |
 
 **Полный пример запроса (curl)**
 
@@ -166,6 +175,8 @@ curl -X POST http://localhost:8002/scraper/results \
     "events": [
       {
         "uuid": "11111111-1111-1111-1111-111111111111",
+        "type": "concert",
+        "id": "123",
         "title": "Концерт группы X",
         "description": "Большой сольный концерт",
         "price": 1500,
@@ -183,6 +194,8 @@ curl -X POST http://localhost:8002/scraper/results \
 
 **Описание полей события (алиасы поддерживаются)**:
 - `uuid` (UUID) — обязателен.
+- `type` (str) — обязателен: `concert`, `stand_up` или `standup` (опечатки не принимаются).
+- `id` (str?) — опционально, исходный id из источника (кладётся в `source_id`).
 - `title` (str) — обязателен.
 - `description` (str?) — опционально.
 - `price` (int?) — опционально.
@@ -204,18 +217,43 @@ curl -X POST http://localhost:8002/scraper/results \
 | --- | --- | --- |
 | GET | `/health` | Проверка статуса сервиса. |
 
-### Приём событий от scraper
+### Приём одного события от скрапера
 
 | Метод | Путь | Тело запроса | Описание | Ответ |
 | --- | --- | --- | --- | --- |
-| POST | `/scraper/upload` | `{ "uuid": "UUID", "title": "str", ... }` | Принимает одно событие и сохраняет в БД (если id новое). | 201 с `{ "detail": "created" }` или `{ "detail": "already_exists" }` при повторном uuid. |
+| POST | `/scraperCatalog/upload` | `{ "uuid": "...", "type": "concert", ... }` | Принимает одно событие от Scraper, определяет таблицу по `type` (`concert` → `concert_events`, `stand_up`/`standup` → `standup_events`), проверяет дубликаты по `uuid`. | 201 `{"detail": "created", "type": "<normalized>"}` или 409/200 с `already_exists`; 400 при неподдерживаемом типе. |
+| GET/HEAD | `/scraperCatalog/photos/{path}` | Отдаёт сохранённые постеры (WEBP), которые скачивает upload-ручка. | 200 с изображением или 404. |
 
-**Пример запроса (curl)**
+**Тело запроса (ключевые поля)**:
+- `uuid` (UUID) — обязателен.
+- `type` (str) — обязателен: `concert`, `stand_up` или `standup`.
+- `id` (str?) — опционально, сохраняется как `source_id`.
+- Остальные поля совпадают с описанием в разделе Scraper (`title`, `description`, `price`, /`date_prewie`, `date_list`/`date_full`, `place`, `genre`, `age`, `image_url`, `url`).
+
+**Пример (curl)**
 
 ```sh
-curl -X POST http://localhost:8003/scraper/upload \
+curl -X POST http://localhost:8003/scraperCatalog/upload \
   -H "Content-Type: application/json" \
-  -d '{"uuid":"11111111-1111-1111-1111-111111111111","title":"Test","description":"desc","price":100}'
+  -d '{
+    "uuid": "11111111-1111-1111-1111-111111111111",
+    "type": "stand_up",
+    "id": "456",
+    "title": "Stand-up вечер",
+    "description": "Шоу лучших комиков",
+    "price": 700,
+    "date_prewie": "2024-09-03T20:00:00",
+    "date_list": ["2024-09-03T20:00:00"],
+    "place": "Малая сцена",
+    "genre": "comedy",
+    "age": "18+",
+    "image_url": "https://example.com/poster2.jpg",
+    "url": "https://example.com/event/2"
+  }'
 ```
 
-**Тело** использует те же поля, что описаны в разделе Scraper (`uuid`, `title`, `description`, `price`, `date_preview`/`date_prewie`, `date_list`/`date_full`, `place`, `genre`/`janre`, `age`/`raiting`, `image_url`, `url`).
+**Статика с постерами**
+
+```sh
+curl -I http://localhost:8003/scraperCatalog/photos/11111111-1111-1111-1111-111111111111.webp
+```
