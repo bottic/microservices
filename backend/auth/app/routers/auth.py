@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -35,6 +35,35 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
+def decode_token_sub(token: str, invalid_detail: str) -> UUID:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+        sub = payload.get("sub")
+        if sub is None:
+            raise JWTError("Missing sub")
+        return UUID(sub)
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=invalid_detail,
+        )
+
+
+async def get_user_by_id(user_id: UUID, db: AsyncSession) -> User:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    return user
+
+
 async def get_user_from_access_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
@@ -45,32 +74,11 @@ async def get_user_from_access_token(
             detail="Not authenticated",
         )
 
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-        )
-        sub = payload.get("sub")
-        if sub is None:
-            raise JWTError("Missing sub")
-        user_id = UUID(sub)
-    except (JWTError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token",
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-
-    return user
+    user_id = decode_token_sub(
+        credentials.credentials,
+        invalid_detail="Invalid access token",
+    )
+    return await get_user_by_id(user_id, db)
 
 
 def create_token(sub: str, expires_delta: timedelta) -> str:
@@ -158,8 +166,25 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_tokens(
     response: Response,
-    user: User = Depends(get_user_from_access_token),
+    refresh_token_cookie: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
 ):
+
+    if refresh_token_cookie:
+        token_value = refresh_token_cookie
+        invalid_detail = "Invalid refresh token"
+    elif credentials:
+        token_value = credentials.credentials
+        invalid_detail = "Invalid access token"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing",
+        )
+
+    user_id = decode_token_sub(token_value, invalid_detail)
+    user = await get_user_by_id(user_id, db)
 
     access_expires = timedelta(minutes=settings.access_token_expires_minutes)
     refresh_expires = timedelta(days=settings.refresh_token_expires_days)

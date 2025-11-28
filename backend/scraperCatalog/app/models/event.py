@@ -50,3 +50,59 @@ class StandUpEvent(EventMixin, Base):
     __table_args__ = (
         UniqueConstraint("uuid", name="uq_standup_events_uuid"),
     )
+
+
+class ExhibitionEvent(EventMixin, Base):
+    __tablename__ = "exhibition_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_exhibition_events_uuid"),
+    )
+
+
+class TheaterEvent(EventMixin, Base):
+    __tablename__ = "theater_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_theater_events_uuid"),
+    )
+
+
+class CinemaEvent(EventMixin, Base):
+    __tablename__ = "cinema_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_cinema_events_uuid"),
+    )
+
+
+class SportEvent(EventMixin, Base):
+    __tablename__ = "sport_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_sport_events_uuid"),
+    )
+
+
+class ExcursionEvent(EventMixin, Base):
+    __tablename__ = "excursion_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_excursion_events_uuid"),
+    )
+
+
+class ShowEvent(EventMixin, Base):
+    __tablename__ = "show_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_show_events_uuid"),
+    )
+
+
+class QuestEvent(EventMixin, Base):
+    __tablename__ = "quest_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_quest_events_uuid"),
+    )
+
+
+class MasterClassEvent(EventMixin, Base):
+    __tablename__ = "master_class_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_master_class_events_uuid"),
+    )

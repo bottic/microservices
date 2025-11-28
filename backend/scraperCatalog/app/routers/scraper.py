@@ -3,7 +3,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.event import ConcertEvent, Event, StandUpEvent
+from app.models.event import (
+    CinemaEvent,
+    ConcertEvent,
+    Event,
+    ExhibitionEvent,
+    ExcursionEvent,
+    MasterClassEvent,
+    QuestEvent,
+    ShowEvent,
+    SportEvent,
+    StandUpEvent,
+    TheaterEvent,
+)
 from app.schemas.event import EventCreate
 from app.services.image_downloader import ImageDownloadError, download_image
 
@@ -13,6 +25,14 @@ router = APIRouter(prefix="/scraperCatalog", tags=["scraper"])
 TYPE_MODEL_MAP = {
     "concert": ConcertEvent,
     "stand_up": StandUpEvent,
+    "exhibition": ExhibitionEvent,
+    "theater": TheaterEvent,
+    "cinema": CinemaEvent,
+    "sport": SportEvent,
+    "excursion": ExcursionEvent,
+    "show": ShowEvent,
+    "quest": QuestEvent,
+    "master_class": MasterClassEvent,
 }
 
 

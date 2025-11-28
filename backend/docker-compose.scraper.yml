@@ -45,5 +45,14 @@ services:
       - ./scraperCatalog/alembic:/app/alembic
       - ./scraperCatalog/alembic.ini:/app/alembic.ini
 
+  catalog:
+    build: ./catalog
+    env_file: ./catalog/.env
+    depends_on:
+      - scrapercatalog
+    ports: ["8001:8000"]
+    volumes:
+      - ./catalog/app:/app/app
+
 volumes:
   pgdata-scraper:

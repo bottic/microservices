@@ -1,9 +1,8 @@
-from typing import List, Union
+from typing import List
 
-import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from app.config import settings
+from app.core.redis import get_cached_events, cache_events, fetch_events_from_scrapercatalog
 from app.schemas.event import EventRead
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -13,34 +12,14 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 async def get_events():
     """
     Отдает события для фронта.
-    Забираем данные из scrapercatalog и просто проксируем их наружу.
+    Сначала пробуем отдать данные из Redis; при отсутствии — забираем из scrapercatalog
+    и кладем их в кэш для последующих запросов.
     """
-    try:
-        async with httpx.AsyncClient(
-            base_url=settings.scraper_catalog_service_url,
-            timeout=10.0,
-        ) as client:
-            resp = await client.get("/scraperCatalog/events")
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"scraperCatalog unavailable: {exc}",
-        ) from exc
+    cached = await get_cached_events()
+    if cached is not None:
+        return cached
 
-    try:
-        payload: Union[list, dict] = resp.json()
-    except ValueError:
-        payload = resp.text
+    events = await fetch_events_from_scrapercatalog()
+    await cache_events(events)
 
-    if not resp.is_success:
-        detail = payload.get("detail") if isinstance(payload, dict) else payload
-        raise HTTPException(status_code=resp.status_code, detail=detail)
-
-    if not isinstance(payload, list):
-        raise HTTPException(
-            status_code=502,
-            detail="Unexpected response from scraperCatalog",
-        )
-
-    # Валидируем через pydantic, чтобы привести типы дат/UUID.
-    return [EventRead.model_validate(event) for event in payload]
+    return events

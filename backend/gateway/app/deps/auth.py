@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer()  # required bearer auth, shows up in OpenAPI
 
 
 class TokenPayload(BaseModel):
@@ -15,14 +15,8 @@ class TokenPayload(BaseModel):
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> TokenPayload:
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
     token = credentials.credentials
 
     try:

@@ -24,7 +24,7 @@ curl -X GET http://localhost:8000/health
 | --- | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ "email": "user@example.com", "password": "string" }` | Создаёт нового пользователя; валидирует уникальность email. | 201 с объектом пользователя `{ "id": "UUID", "email": "string" }`. Ошибка 400 если email уже существует. |
 | POST | `/auth/login` | `{ "email": "user@example.com", "password": "string" }` | Проверяет учетные данные, выдаёт access и ставит refresh в HttpOnly cookie. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверных данных. |
-| POST | `/auth/refresh` | (пустое тело) | Обновляет access-токен по заголовку `Authorization: Bearer <access_token>`; также обновляет refresh в HttpOnly cookie. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и обновлённым Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверном/просроченном токене. |
+| POST | `/auth/refresh` | (пустое тело) | Обновляет access-токен по refresh токену из HttpOnly cookie `refresh_token`; также выдаёт новый refresh. Authorization не требуется. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и обновлённым Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при отсутствии/невалидном/просроченном refresh. |
 | POST | `/auth/change-password` | `{ "email": "user@example.com", "password": "old", "newPassword": "new" }` | Проверяет старый пароль и обновляет на новый, выдаёт свежие access+refresh. | 200 с `{ "access_token": "<jwt>", "token_type": "bearer" }` и Set-Cookie `refresh_token=<jwt>; HttpOnly`. Ошибка 401 при неверных данных. |
 | POST | `/auth/logout` | (пустое тело) | Требует заголовок `Authorization: Bearer <access_token>`, удаляет refresh cookie. | 200 `{ "detail": "Logged out" }`. |
 
@@ -45,15 +45,13 @@ curl -X POST http://localhost:8000/auth/register \
 ```
 
 ```sh
-# 1) логин
-curl -i -X POST http://localhost:8000/auth/login \
+# 1) логин с сохранением refresh куки
+curl -i -c backend/cookies.txt -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@exam1ple.com","password":"P@ssw0rd"}'
 
-# 2) обновление access по заголовку Authorization (подставьте токен из шага 1)
-ACCESS_TOKEN="<access_token_from_login>"
-curl -i -X POST http://localhost:8000/auth/refresh \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+# 2) обновление access по refresh куке (Authorization не нужен)
+curl -i -b backend/cookies.txt -X POST http://localhost:8000/auth/refresh
 
 ```
 
@@ -102,7 +100,7 @@ Gateway проксирует запросы к другим сервисам и 
 | --- | --- | --- | --- |
 | GET | `/health` | Проверка статуса gateway. | — |
 | POST | `/auth/login` | Пробрасывает тело запроса в Auth Service `/auth/login`; контент-тип сохраняется. | Auth Service |
-| POST | `/auth/refresh` | Пробрасывает тело и заголовок Authorization в Auth Service `/auth/refresh`; возвращает Set-Cookie. | Auth Service |
+| POST | `/auth/refresh` | Пробрасывает тело и refresh-куку в Auth Service `/auth/refresh`; Authorization заголовок опционален для обратной совместимости; возвращает Set-Cookie. | Auth Service |
 | POST | `/auth/register` | Пробрасывает тело запроса в Auth Service `/auth/register`. | Auth Service |
 | POST | `/auth/change-password` | Пробрасывает тело и cookie в Auth Service `/auth/change-password`. | Auth Service |
 | POST | `/auth/logout` | Пробрасывает заголовок Authorization в Auth Service `/auth/logout`. | Auth Service |
@@ -133,10 +131,8 @@ curl -i -X POST http://localhost:8000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"P@ssw0rd"}'
 
-# Обновить access по заголовку Authorization
-ACCESS_TOKEN="<access_token_from_login>"
-curl -i -X POST http://localhost:8000/auth/refresh \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+# Обновить access по refresh куке
+curl -i -b backend/cookies.txt -X POST http://localhost:8000/auth/refresh
 
 # Сменить пароль через gateway
 curl -i -X POST http://localhost:8000/auth/change-password \
@@ -193,8 +189,9 @@ curl -X POST http://localhost:8002/scraper/results \
 ```
 
 **Описание полей события (алиасы поддерживаются)**:
+
 - `uuid` (UUID) — обязателен.
-- `type` (str) — обязателен: `concert`, `stand_up` или `standup` (опечатки не принимаются).
+- `type` (str) — обязателен: один из `concert`, `stand_up`, `exhibition`, `theater`, `cinema`, `sport`, `excursion`, `show`, `quest`, `master_class` (алиасы: `standup`, `theatre`, `movie`/`film`, `sports`, `excursions`, `quests`, `masterclass`, `exhibitions`).
 - `id` (str?) — опционально, исходный id из источника (кладётся в `source_id`).
 - `title` (str) — обязателен.
 - `description` (str?) — опционально.
@@ -221,12 +218,13 @@ curl -X POST http://localhost:8002/scraper/results \
 
 | Метод | Путь | Тело запроса | Описание | Ответ |
 | --- | --- | --- | --- | --- |
-| POST | `/scraperCatalog/upload` | `{ "uuid": "...", "type": "concert", ... }` | Принимает одно событие от Scraper, определяет таблицу по `type` (`concert` → `concert_events`, `stand_up`/`standup` → `standup_events`), проверяет дубликаты по `uuid`. | 201 `{"detail": "created", "type": "<normalized>"}` или 409/200 с `already_exists`; 400 при неподдерживаемом типе. |
+| POST | `/scraperCatalog/upload` | `{ "uuid": "...", "type": "concert", ... }` | Принимает одно событие от Scraper, определяет таблицу по `type` (`concert` → `concert_events`, `stand_up` → `standup_events`, `exhibition` → `exhibition_events`, `theater` → `theater_events`, `cinema` → `cinema_events`, `sport` → `sport_events`, `excursion` → `excursion_events`, `show` → `show_events`, `quest` → `quest_events`, `master_class` → `master_class_events`), проверяет дубликаты по `uuid`. | 201 `{"detail": "created", "type": "<normalized>"}` или 409/200 с `already_exists`; 400 при неподдерживаемом типе. |
 | GET/HEAD | `/scraperCatalog/photos/{path}` | Отдаёт сохранённые постеры (WEBP), которые скачивает upload-ручка. | 200 с изображением или 404. |
 
 **Тело запроса (ключевые поля)**:
+
 - `uuid` (UUID) — обязателен.
-- `type` (str) — обязателен: `concert`, `stand_up` или `standup`.
+- `type` (str) — обязателен: `concert`, `stand_up`, `exhibition`, `theater`, `cinema`, `sport`, `excursion`, `show`, `quest`, `master_class` (алиасы: `standup`, `theatre`, `movie`/`film`, `sports`, `excursions`, `quests`, `masterclass`, `exhibitions`).
 - `id` (str?) — опционально, сохраняется как `source_id`.
 - Остальные поля совпадают с описанием в разделе Scraper (`title`, `description`, `price`, /`date_prewie`, `date_list`/`date_full`, `place`, `genre`, `age`, `image_url`, `url`).
 

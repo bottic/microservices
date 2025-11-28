@@ -44,7 +44,21 @@ class EventCreate(BaseModel):
             .strip()
             .lower()
         )
-        return normalized.replace(" ", "_")
+        normalized = normalized.replace(" ", "_")
+
+        aliases = {
+            "stand_up": "stand_up",
+            "theater": "theater",
+            "cinema": "cinema",
+            "sport": "sport",
+            "excursion": "excursion",
+            "quest": "quest",
+            "master_class": "master_class",
+            "show": "show",
+            "concert": "concert",
+        }
+
+        return aliases.get(normalized, normalized)
 
 
 class EventRead(BaseModel):

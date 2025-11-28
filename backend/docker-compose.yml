@@ -39,7 +39,7 @@ services:
       - ./auth/alembic:/app/alembic
       - ./auth/alembic.ini:/app/alembic.ini
 
-  redis:
+  redisScraper:
     image: redis:7-alpine
     ports: ["6379:6379"]
     healthcheck:
@@ -69,30 +69,54 @@ services:
   scraper:
     build: ./scraper
     env_file: ./scraper/.env
-    depends_on: [redis, scrapercatalog]
+    depends_on:
+      redisScraper:
+        condition: service_healthy
+      scrapercatalog:
+        condition: service_healthy
     # ports: ["8002:8000"]  # внешний порт/внутренний порт
 
   scrapercatalog:
     build: ./scraperCatalog
     env_file: ./scraperCatalog/.env
-    depends_on: 
-      - postgresScraper
+    depends_on:
+      postgresScraper:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     # ports: ["8003:8000"]
     volumes:
       - ./scraperCatalog/app:/app/app
       - ./scraperCatalog/alembic:/app/alembic
       - ./scraperCatalog/alembic.ini:/app/alembic.ini
 
+  redisCatalog:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   catalog:
     build: ./catalog
     env_file: ./catalog/.env
     depends_on:
       - scrapercatalog
+      - redisCatalog
     # ports: ["8001:8000"]
     volumes:
       - ./catalog/app:/app/app
       - ./scraperCatalog/app/photos:/app/photos:ro
-
+  # 
 volumes:
   pgdata:
   pgdata-scraper:
