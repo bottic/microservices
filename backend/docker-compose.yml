@@ -9,6 +9,12 @@ services:
       POSTGRES_DB: db_auth
     ports:
       - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -33,7 +39,10 @@ services:
     build: ./auth
     env_file: ./auth/.env
     depends_on:
-      - postgresAuth
+      postgresAuth:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./auth/app:/app/app
       - ./auth/alembic:/app/alembic
@@ -115,7 +124,6 @@ services:
     # ports: ["8001:8000"]
     volumes:
       - ./catalog/app:/app/app
-      - ./scraperCatalog/app/photos:/app/photos:ro
   # 
 volumes:
   pgdata:

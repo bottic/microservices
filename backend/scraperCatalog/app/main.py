@@ -12,7 +12,6 @@ app = FastAPI(
 )
 
 
-PHOTOS_DIR = Path(__file__).resolve().parent / "photos"
 
 
 @app.get("/health")
@@ -22,10 +21,3 @@ async def healthz():
 
 app.include_router(scraper.router)
 app.include_router(catalog.router)
-
-# Отдаём скачанные постеры как статик.
-app.mount(
-    "/scraperCatalog/photos",
-    StaticFiles(directory=PHOTOS_DIR),
-    name="photos",
-)

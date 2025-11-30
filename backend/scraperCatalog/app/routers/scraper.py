@@ -61,8 +61,7 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
     stored_image_url = data.image_url
     if data.image_url:
         try:
-            await download_image(data.image_url, str(data.uuid))
-            stored_image_url = f"/scraperCatalog/photos/{data.uuid}.webp"
+            stored_image_url = await download_image(data.image_url, str(data.uuid))
         except ImageDownloadError as exc:
             raise HTTPException(
                 status_code=getattr(exc, "status_code", status.HTTP_502_BAD_GATEWAY),

@@ -33,31 +33,3 @@ async def list_events():
 
     return payload
 
-
-@router.api_route("/scraperCatalog/photos/{path:path}", methods=["GET", "HEAD"])
-async def proxy_scrapercatalog_photos(path: str, request: Request):
-    """
-    Прокси для статики с постерами, чтобы фронт ходил через gateway.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.request(
-                method=request.method,
-                url=f"{settings.scraper_catalog_service_url}/scraperCatalog/photos/{path}",
-            )
-    except httpx.RequestError as exc:
-        raise HTTPException(502, detail=f"scraperCatalog unavailable: {exc}") from exc
-
-    headers = {}
-    content_type = resp.headers.get("content-type")
-    if content_type:
-        headers["content-type"] = content_type
-
-    if resp.is_success:
-        return Response(
-            content=resp.content,
-            status_code=resp.status_code,
-            headers=headers or None,
-        )
-
-    raise HTTPException(status_code=resp.status_code, detail=resp.text)
