@@ -9,6 +9,7 @@ from app.routers import results
 from app.config import settings
 from app.core.collector import run_scrape
 from app.services.forwarder import forward_events_to_catalog
+from app.services.init_redis import warmup_processed_from_catalog
 
 app = FastAPI(
     title="Scraper Service",
@@ -40,7 +41,8 @@ async def _scrape_loop():
 
 @app.on_event("startup")
 async def startup_event():
-    global _scrape_task  # noqa: PLW0603
+    global _scrape_task
+    await warmup_processed_from_catalog()
     if _scrape_task is None:
         _scrape_task = asyncio.create_task(_scrape_loop())
 

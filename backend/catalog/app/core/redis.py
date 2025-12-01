@@ -49,9 +49,6 @@ async def get_cached_events() -> Optional[List[EventRead]]:
 
 
 async def cache_events(events: List[EventRead]) -> None:
-    """
-    Сохраняем список событий в Redis; ошибки игнорируем, чтобы не ломать выдачу.
-    """
     try:
         payload = json.dumps([event.model_dump(mode="json") for event in events])
         await redis_client.set(EVENTS_CACHE_KEY, payload)
@@ -60,9 +57,6 @@ async def cache_events(events: List[EventRead]) -> None:
 
 
 async def fetch_events_from_scrapercatalog() -> List[EventRead]:
-    """
-    Запрашивает события у scrapercatalog и валидирует ответ.
-    """
     try:
         async with httpx.AsyncClient(
             base_url=settings.scraper_catalog_service_url,

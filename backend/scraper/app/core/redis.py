@@ -4,7 +4,7 @@ import redis.asyncio as redis
 from redis.asyncio.client import Redis
 
 from app.config import settings
-
+from typing import Iterable 
 
 def _build_client() -> Redis:
     return redis.from_url(settings.redis_url, decode_responses=True)
@@ -25,3 +25,10 @@ async def mark_processed(event_id: UUID) -> None:
 
 async def close_redis() -> None:
     await redis_client.close()
+
+async def mark_processed_batch(event_ids: Iterable[UUID]) -> int:
+    ids = [str(e) for e in event_ids]
+    if not ids:
+        return 0
+    added = await redis_client.sadd(PROCESSED_SET_KEY, *ids)
+    return int(added or 0)

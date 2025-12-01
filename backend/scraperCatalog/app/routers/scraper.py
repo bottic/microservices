@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, exists, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.event import (
     CinemaEvent,
     ConcertEvent,
-    Event,
+    ActiveEvent,
+    InactiveEvent,
     ExhibitionEvent,
     ExcursionEvent,
     MasterClassEvent,
@@ -41,9 +42,17 @@ async def process_event(data: EventCreate, db: AsyncSession) -> dict:
     if model is None:
         return {"status": "skipped", "reason": "unsupported_type", "uuid": str(data.uuid), "type": data.event_type}
     
-    existing_common = await db.scalar(select(Event).where(Event.uuid == data.uuid))
+    stmt = select(
+        or_(
+            select(exists().where(ActiveEvent.uuid == data.uuid)).scalar_subquery(),
+            select(exists().where(InactiveEvent.uuid == data.uuid)).scalar_subquery(),
+            select(exists().where(model.uuid == data.uuid)).scalar_subquery(),
+        )
+    )
+
+    already_exists = bool(await db.scalar(stmt))
     existing = await db.scalar(select(model).where(model.uuid == data.uuid))
-    if existing_common or existing:
+    if already_exists or existing:
         return {"status": "skipped", "reason": "already_exists", "uuid": str(data.uuid), "type": normalized_type}
     
     stored_image_url = None
@@ -62,7 +71,7 @@ async def process_event(data: EventCreate, db: AsyncSession) -> dict:
     if not stored_image_url:
         return {"status": "skipped", "reason": "no_image_url", "uuid": str(data.uuid), "type": normalized_type}
     
-    common_event = Event(
+    common_event = ActiveEvent(
         uuid=data.uuid,
         source_id=data.source_id,
         title=data.title,

@@ -30,12 +30,22 @@ class EventMixin:
     url = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-
-class Event(EventMixin, Base):
-    __tablename__ = "events"
+class ActiveEvent(EventMixin, Base):
+    __tablename__ = "active_events"
     __table_args__ = (
-        UniqueConstraint("uuid", name="uq_events_uuid"),
+        UniqueConstraint("uuid", name="uq_active_events_uuid"),
     )
+
+class InactiveEvent(EventMixin, Base):
+    __tablename__ = "inactive_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_inactive_events_uuid"),
+    )
+# class Event(EventMixin, Base):
+#     __tablename__ = "events"
+#     __table_args__ = (
+#         UniqueConstraint("uuid", name="uq_events_uuid"),
+#     )
 
 
 class ConcertEvent(EventMixin, Base):
@@ -106,3 +116,4 @@ class MasterClassEvent(EventMixin, Base):
     __table_args__ = (
         UniqueConstraint("uuid", name="uq_master_class_events_uuid"),
     )
+

@@ -3,6 +3,8 @@ from fastapi.responses import JSONResponse
 import httpx
 from app.config import settings
 
+from app.deps.auth import TokenPayload
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def build_json_response(resp: httpx.Response, content_override=None) -> JSONResponse:

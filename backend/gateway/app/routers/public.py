@@ -12,10 +12,7 @@ async def healthz():
 
 
 @router.get("/catalog/events")
-async def list_events():
-    """
-    Проксируем события из сервиса catalog (который сам ходит в scraperCatalog).
-    """
+async def list_active_events():
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{settings.catalog_service_url}/catalog/events")
