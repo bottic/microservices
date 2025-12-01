@@ -10,29 +10,26 @@ class ScrapedEvent(BaseModel):
 
     uuid: UUID = Field(alias="uuid")
     source_id: Optional[str] = Field(default=None, alias="id")
-    event_type: str = Field(alias="type")
+    event_type: str = Field(validation_alias=AliasChoices("type", "event_type"))
     title: str
     description: str
-    price: Optional[int] = None
-    date_preview: Optional[datetime] = Field(
-        default=None,
+    price: int
+    date_preview: datetime = Field(
         validation_alias=AliasChoices("date_preview", "date_prewie"),
     )
-    date_list: Optional[List[datetime]] = Field(
-        default=None,
+    date_list: List[datetime] = Field(
         validation_alias=AliasChoices("date_list", "date_full"),
     )
-    place: Optional[str] = None
-    genre: Optional[str] = Field(
-        default=None,
+    place: str
+    genre: str = Field(
         validation_alias=AliasChoices("genre", "janre"),
     )
     age: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("age", "raiting"),
     )
-    image_url: Optional[str] = None
-    url: Optional[str] = None
+    image_url: str
+    url: str
 
     def to_catalog_payload(self) -> dict:
         """
@@ -54,7 +51,6 @@ class ScrapedEvent(BaseModel):
             "image_url": self.image_url,
             "url": self.url,
         }
-
 
 class ScrapedEventsBatch(BaseModel):
     events: List[ScrapedEvent]

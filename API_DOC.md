@@ -68,7 +68,7 @@ curl -X GET http://localhost:8000/me/ping \
 | Метод | Путь | Тело | Описание | Ответ |
 | --- | --- | --- | --- | --- |
 | GET | `/health` | — | Статус сервиса. | `{"status":"ok","service":"scraper"}` |
-| POST | `/scraper/results` | `{ "events": [<ScrapedEvent>] }` | Принимает пачку событий, пересылает каждое в ScraperCatalog `/scraperCatalog/upload`, помечает uuid в Redis. | 202 `{ "sent": int, "skipped": int, "failed": [ { "uuid": "...", "status_code": int, "detail": "..." } ] }`; 503 если Redis недоступен. |
+| POST | `/scraper/results` | `{ "events": [<ScrapedEvent>] }` | Принимает пачку событий, пересылает их батчами (`BATCH_SIZE`, по умолчанию 100) в ScraperCatalog `/scraperCatalog/upload/batch`, помечает uuid в Redis после успешной записи (или если уже существуют). | 202 `{ "sent": int, "skipped": int, "failed": [ { "uuid": "...", "status_code": int, "detail": "..." } ] }`; 503 если Redis недоступен. |
 | POST | `/scraper/run` | — | Запускает `run_scrape()` и отправляет результаты так же, как `/scraper/results`. | 202 с той же структурой или 503 при ошибке Redis. |
 
 Фоновая задача на старте вызывает `run_scrape()` и форвардит результаты каждые `SCRAPE_INTERVAL_SECONDS` (не меньше 5 с).
@@ -79,7 +79,8 @@ curl -X GET http://localhost:8000/me/ping \
 | Метод | Путь | Тело | Описание | Ответ |
 | --- | --- | --- | --- | --- |
 | GET | `/health` | — | Статус сервиса. | `{"status":"ok","service":"scraperCatalog"}` |
-| POST | `/scraperCatalog/upload` | `<EventCreate>` | Сохраняет событие в общей таблице и в типовой таблице; при наличии `image_url` скачивает файл, конвертирует в WEBP и кладёт в S3, сохраняя публичный URL в БД. Поддерживаемые типы после нормализации: `concert`, `stand_up`, `exhibition`, `theater`, `cinema`, `sport`, `excursion`, `show`, `quest`, `master_class`; дефисы/пробелы/подчёркивания приравниваются. | 201 `{ "detail": "created", "type": "<normalized>" }`; `{ "detail": "already_exists" }` если uuid уже есть; 400 при неподдерживаемом типе; 502/400 при ошибке загрузки изображения. |
+| POST | `/scraperCatalog/upload/batch` | `{ "events": [<EventCreate>] }` | Батчевое сохранение событий: создаёт записи в общей и типовых таблицах, скачивает картинки для каждого элемента. Поддерживаемые типы те же, что в одиночной ручке. | 201 `{ "created": [ { "uuid": "...", "type": "..." } ], "skipped": [ { "uuid": "...", "type": "...", "reason": "already_exists|unsupported_type|no_image_url" } ], "failed": [ { "uuid": "...", "type": "...", "reason": "image_download_failed", "detail": "..." } ] }` |
+| POST | `/scraperCatalog/upload` | `<EventCreate>` | Одиночная запись события; логика такая же, как в батче, для обратной совместимости. | 201 `{ "detail": "created", "type": "<normalized>" }`; `{ "detail": "already_exists" }` если uuid уже есть; 400 при неподдерживаемом типе; 502/400 при ошибке загрузки изображения. |
 | GET | `/scraperCatalog/events` | — | Возвращает все события из общей таблицы без пагинации. | `[Event]` с полями, как в Catalog Service. |
 
 **Схема события (`ScrapedEvent`/`EventCreate`)**

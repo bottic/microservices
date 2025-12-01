@@ -16,7 +16,7 @@ from app.models.event import (
     StandUpEvent,
     TheaterEvent,
 )
-from app.schemas.event import EventCreate
+from app.schemas.event import EventCreate, EventCreateBatch
 from app.services.image_downloader import ImageDownloadError, download_image
 
 router = APIRouter(prefix="/scraperCatalog", tags=["scraper"])
@@ -35,39 +35,33 @@ TYPE_MODEL_MAP = {
     "master_class": MasterClassEvent,
 }
 
-
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
-async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
-    """
-    Принимаем одно событие от сервиса scraper и сохраняем в БД.
-    Сохраняем в таблицу, которая соответствует типу события.
-    """
+async def process_event(data: EventCreate, db: AsyncSession) -> dict:
     normalized_type = data.normalized_type()
     model = TYPE_MODEL_MAP.get(normalized_type)
     if model is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"unsupported event type: {data.event_type}",
-        )
-
+        return {"status": "skipped", "reason": "unsupported_type", "uuid": str(data.uuid), "type": data.event_type}
+    
     existing_common = await db.scalar(select(Event).where(Event.uuid == data.uuid))
-    if existing_common:
-        return {"detail": "already_exists"}
-
     existing = await db.scalar(select(model).where(model.uuid == data.uuid))
-    if existing:  # редкий случай несогласованности
-        return {"detail": "already_exists"}
-
-    stored_image_url = data.image_url
+    if existing_common or existing:
+        return {"status": "skipped", "reason": "already_exists", "uuid": str(data.uuid), "type": normalized_type}
+    
+    stored_image_url = None
     if data.image_url:
         try:
             stored_image_url = await download_image(data.image_url, str(data.uuid))
         except ImageDownloadError as exc:
-            raise HTTPException(
-                status_code=getattr(exc, "status_code", status.HTTP_502_BAD_GATEWAY),
-                detail=str(exc),
-            ) from exc
-
+            return {
+                "status": "failed",
+                "reason": "image_download_failed",
+                "detail": str(exc),
+                "uuid": str(data.uuid),
+                "type": normalized_type,
+            }
+        
+    if not stored_image_url:
+        return {"status": "skipped", "reason": "no_image_url", "uuid": str(data.uuid), "type": normalized_type}
+    
     common_event = Event(
         uuid=data.uuid,
         source_id=data.source_id,
@@ -102,6 +96,60 @@ async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
 
     db.add(common_event)
     db.add(type_event)
-    await db.commit()
+    return {"status": "created", "uuid": str(data.uuid), "type": normalized_type}
+    
 
-    return {"detail": "created", "type": normalized_type}
+@router.post("/upload/batch", status_code=status.HTTP_201_CREATED)
+async def upload_data_batch(data: EventCreateBatch, db: AsyncSession = Depends(get_db)):
+    created_events = []
+    skipped_events = []
+    failed_events = []
+
+    try:
+        for event_data in data.events:
+            result = await process_event(event_data, db)
+            if result["status"] == "created":
+                created_events.append({"uuid": result["uuid"], "type": result["type"]})
+
+            elif result["status"] == "skipped":
+                skipped_events.append(
+                    {"uuid": result["uuid"], "type": result["type"], "reason": result["reason"]}
+                )
+            elif result["status"] == "failed":
+                failed_events.append(
+                    {
+                        "uuid": result["uuid"],
+                        "type": result["type"],
+                        "reason": result["reason"],
+                        "detail": result.get("detail"),
+                    }
+                )
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="failed to process batch"
+        ) from exc
+
+    return {"created": created_events, "skipped": skipped_events, "failed": failed_events}
+
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+async def upload_data(data: EventCreate, db: AsyncSession = Depends(get_db)):
+    result = await process_event(data, db)
+    if result["status"] == "created":
+        try:
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="failed to save event"
+            ) from exc
+        return {"detail": "created", "uuid": result["uuid"], "type": result["type"]}
+    elif result["status"] == "skipped":
+        return {"detail": "skipped", "reason": result["reason"], "uuid": result["uuid"], "type": result["type"]}
+    elif result["status"] == "failed":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"not created, {result['reason']}: {result.get('detail')}",
+        )
+    
