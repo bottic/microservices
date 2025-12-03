@@ -30,3 +30,21 @@ async def list_active_events():
 
     return payload
 
+@router.get("/catalog/events/{event_type}")
+async def list_active_events_by_type(event_type: str):
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.catalog_service_url}/catalog/events/{event_type}")
+    except httpx.RequestError as exc:
+        raise HTTPException(502, detail=f"catalog unavailable: {exc}") from exc
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = resp.text
+
+    if not resp.is_success:
+        detail = payload.get("detail") if isinstance(payload, dict) else payload
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    return payload

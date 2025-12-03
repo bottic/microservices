@@ -2,15 +2,15 @@ import redis.asyncio as redis
 from redis.asyncio.client import Redis
 from redis.exceptions import RedisError
 
-import httpx
+
 import json
 
 from app.config import settings
-from typing import List, Optional, Union
+from typing import List, Optional
 from app.schemas.event import EventRead
 
 from pydantic import ValidationError
-from fastapi import HTTPException
+
 
 
 def _build_client() -> Redis:
@@ -19,15 +19,12 @@ def _build_client() -> Redis:
 
 redis_client: Redis = _build_client()
 
-EVENTS_CACHE_KEY = settings.events_cache_key
+EVENTS_CACHE_PREFIX = settings.events_cache_prefix
 
-async def get_cached_events() -> Optional[List[EventRead]]:
-    """
-    Возвращает события из кэша, если они есть и корректны.
-    При ошибках или отсутствии кэша возвращает None.
-    """
+async def get_cached_events(scope: str = 'all') -> Optional[List[EventRead]]:
     try:
-        cached_raw = await redis_client.get(EVENTS_CACHE_KEY)
+        key = EVENTS_CACHE_PREFIX + f":{scope}"
+        cached_raw = await redis_client.get(key)
     except RedisError:
         return None
 
@@ -48,43 +45,13 @@ async def get_cached_events() -> Optional[List[EventRead]]:
         return None
 
 
-async def cache_events(events: List[EventRead]) -> None:
+async def cache_events(events: List[EventRead], scope: str = "all") -> None:
     try:
+        key = EVENTS_CACHE_PREFIX + f":{scope}"
         payload = json.dumps([event.model_dump(mode="json") for event in events])
-        await redis_client.set(EVENTS_CACHE_KEY, payload)
+        await redis_client.set(key, payload, ex=settings.redis_ttl_seconds)
     except RedisError:
         return
-
-
-async def fetch_events_from_scrapercatalog() -> List[EventRead]:
-    try:
-        async with httpx.AsyncClient(
-            base_url=settings.scraper_catalog_service_url,
-            timeout=10.0,
-        ) as client:
-            resp = await client.get("/scraperCatalog/events")
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"scraperCatalog unavailable: {exc}",
-        ) from exc
-
-    try:
-        payload: Union[list, dict] = resp.json()
-    except ValueError:
-        payload = resp.text
-
-    if not resp.is_success:
-        detail = payload.get("detail") if isinstance(payload, dict) else payload
-        raise HTTPException(status_code=resp.status_code, detail=detail)
-
-    if not isinstance(payload, list):
-        raise HTTPException(
-            status_code=502,
-            detail="Unexpected response from scraperCatalog",
-        )
-
-    return [EventRead.model_validate(event) for event in payload]
 
 async def close_redis() -> None:
     await redis_client.close()
