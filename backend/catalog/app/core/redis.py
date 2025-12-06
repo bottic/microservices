@@ -44,6 +44,15 @@ async def get_cached_events(scope: str = 'all') -> Optional[List[EventRead]]:
     except ValidationError:
         return None
 
+async def get_cached_event_by_id(event_id: int, scope: str = 'all') -> Optional[EventRead]:
+    events = await get_cached_events(scope=scope)
+    if not events:
+        return None
+
+    for event in events:
+        if event.id == event_id:
+            return event
+    return None
 
 async def cache_events(events: List[EventRead], scope: str = "all") -> None:
     try:
@@ -55,3 +64,4 @@ async def cache_events(events: List[EventRead], scope: str = "all") -> None:
 
 async def close_redis() -> None:
     await redis_client.close()
+
