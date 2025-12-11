@@ -14,7 +14,7 @@ async def fetch_events_from_scrapercatalog(type: str = 'all') -> List[EventRead]
             if type == 'all':
                 resp = await client.get("/scraperCatalog/events")
             else:
-                resp = await client.get(f"/scraperCatalog/events/{type}")
+                resp = await client.get(f"/scraperCatalog/events?type={type}")
     except httpx.RequestError as exc:
         raise HTTPException(
             status_code=502,
