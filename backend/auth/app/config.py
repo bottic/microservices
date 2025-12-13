@@ -13,6 +13,7 @@ class Settings(BaseModel):
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     access_token_expires_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRES", "15"))
     refresh_token_expires_days: int = int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", "30"))
+    cookie_secure: bool = os.getenv("COOKIE_SECURE", "False").lower() in ("true", "1", "yes")
 
 
 settings = Settings()

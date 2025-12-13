@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, Body
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -103,13 +103,13 @@ def set_refresh_cookie(
         max_age=max_age,
         path="/auth/refresh",
         samesite="lax",
-        secure=False,  # переключите на True в проде за HTTPS
+        secure=settings.cookie_secure,  # переключите на True в проде за HTTPS
     )
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register_user(
-    data: UserCreate,
+    data: UserCreate = Body(..., example={"email": "a@b.com", "password": "secret"}),
     db: AsyncSession = Depends(get_db),
 ):
     
@@ -134,8 +134,8 @@ async def register_user(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    data: UserCreate,  # переиспользуем форму: email + password
     response: Response,
+    data: UserCreate = Body(..., example={"email": "a@b.com", "password": "secret"}),  # переиспользуем форму: email + password
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(User).where(User.email == data.email))
@@ -249,6 +249,6 @@ async def logout(
         httponly=True,
         path="/auth/refresh",
         samesite="lax",
-        secure=False,  # переключите на True в проде за HTTPS
+        secure=settings.cookie_secure,  # переключите на True в проде за HTTPS
     )
     return {"detail": "Logged out"}

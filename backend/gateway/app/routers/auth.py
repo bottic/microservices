@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Body
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import httpx
 from app.config import settings
 
@@ -32,18 +33,16 @@ def build_json_response(resp: httpx.Response, content_override=None) -> JSONResp
 
 
 @router.post("/login")
-async def login_proxy(request: Request):
-    """
-    Проксируем логин на сервис auth.
-    Тело запроса просто пробрасываем как есть.
-    """
-    body = await request.body()
+async def login_proxy(
+    request: Request,
+    data: dict[str, str] = Body(..., example={"email": "a@b.com", "password": "secret"})
+    ):
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
                 f"{settings.auth_service_url}/auth/login",
-                content=body,
+                json=data,
                 headers={"Content-Type": request.headers.get("content-type", "application/json")},
                 cookies=request.cookies,
                 timeout=5.0,
@@ -54,18 +53,16 @@ async def login_proxy(request: Request):
     return build_json_response(resp)
 
 @router.post("/register")
-async def register_proxy(request: Request):
-    """
-    Прокси для регистрации пользователя.
-    Тело запроса пробрасываем как есть в сервис auth.
-    """
-    body = await request.body()
+async def register_proxy(
+    request: Request,
+    data: dict[str, str] = Body(..., example={"email": "a@b.com", "password": "secret"})
+    ):
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
                 f"{settings.auth_service_url}/auth/register",
-                content=body,
+                json=data,
                 headers={
                     "Content-Type": request.headers.get(
                         "content-type", "application/json"
@@ -83,10 +80,11 @@ async def register_proxy(request: Request):
     return build_json_response(resp)
 
 @router.post("/refresh")
-async def refresh_proxy(request: Request):
-    """
-    Прокси для обновления access-токена по access-токену пользователя.
-    """
+async def refresh_proxy(
+    request: Request,
+    data: dict[str, str] = Body(..., example={"access_token": "a@b.com", "password": "secret"})
+    ):
+
     body = await request.body()
 
     headers = {
