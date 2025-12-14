@@ -8,9 +8,6 @@ from app.db.base import Base
 
 
 class EventMixin:
-    """
-    Общие поля для событий. Наследуем в конкретных таблицах по типу события.
-    """
 
     __abstract__ = True
 
@@ -41,11 +38,13 @@ class InactiveEvent(EventMixin, Base):
     __table_args__ = (
         UniqueConstraint("uuid", name="uq_inactive_events_uuid"),
     )
-# class Event(EventMixin, Base):
-#     __tablename__ = "events"
-#     __table_args__ = (
-#         UniqueConstraint("uuid", name="uq_events_uuid"),
-#     )
+
+
+class BestEvents(EventMixin, Base):
+    __tablename__ = "best_events"
+    __table_args__ = (
+        UniqueConstraint("uuid", name="uq_best_events_uuid"),
+    )
 
 
 class ConcertEvent(EventMixin, Base):

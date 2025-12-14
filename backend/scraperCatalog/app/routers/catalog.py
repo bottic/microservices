@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Body
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.models.event import (
     SportEvent,
     StandUpEvent,
     TheaterEvent,
+    BestEvents
 )
 
 router = APIRouter(prefix="/scraperCatalog", tags=["catalog"])
@@ -67,3 +68,63 @@ async def list_inactive_events(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(InactiveEvent))
     events = result.scalars().all()
     return [EventRead.model_validate(event) for event in events]
+
+@router.post("/events/post-best")
+async def post_best_events(
+    event_ids: List[int] = Body(...,embed=True, description="List of Event IDs"),
+    db: AsyncSession = Depends(get_db),
+):
+    
+    if not event_ids:
+        raise HTTPException(status_code=400, detail="ids cannot be empty")
+
+    result = await db.execute(select(ActiveEvent).where(ActiveEvent.id.in_(event_ids)))
+    events = result.scalars().all()
+
+    if not events:
+        raise HTTPException(status_code=404, detail="no events found for the given IDs")
+
+    found_ids = {event.id for event in events}
+    not_found_ids = sorted(set(event_ids) - found_ids)
+
+    event_uuids = [event.uuid for event in events]
+    existing_best = await db.execute(select(BestEvents.uuid).where(BestEvents.uuid.in_(event_uuids)))
+    existing_uuids = set(existing_best.scalars().all())
+
+    added_count = 0
+    for event in events:
+        if event.uuid in existing_uuids:
+            continue
+        best_event = BestEvents(
+            uuid=event.uuid,
+            source_id=event.source_id,
+            title=event.title,
+            description=event.description,
+            price=event.price,
+            date_preview=event.date_preview,
+            date_list=event.date_list,
+            place=event.place,
+            event_type=event.event_type,
+            genre=event.genre,
+            age=event.age,
+            image_url=event.image_url,
+            url=event.url,
+        )
+
+        db.add(best_event)
+
+        added_count += 1
+
+    try:
+        if added_count:
+            await db.commit()
+    except Exception as exc:  
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="failed to save best events") from exc
+
+    return {
+        "status": "success",
+        "added_event_count": added_count,
+        "skipped_existing_uuids": [str(uuid) for uuid in existing_uuids],
+        "not_found_ids": not_found_ids,
+    }

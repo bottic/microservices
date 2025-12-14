@@ -2,9 +2,11 @@ from typing import List, Optional
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Query, Body
+from app.config import settings
 from app.core.redis import get_cached_events, cache_events, get_cached_event_by_id
 from app.core.fetch_events import fetch_events_from_scrapercatalog, fetch_event_from_scrapercatalog_by_id
+from app.core.best_evenst import forward_best_events
 from app.schemas.event import EventRead
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -102,3 +104,17 @@ async def get_nearest_events(
             raise HTTPException(status_code=404, detail="unsupported event type")
         scope = t
     return await _get_nearest_events(scope=scope, limit=limit)
+
+
+@router.post("/events/post-best")
+async def post_best_events(
+    event_ids: List[int] = Body(...,embed=True, description="List of Event IDs"),
+    password: str = Body(...,embed=True, description="Admin password for authorization"),
+):
+    if password != settings.admin_pass:
+        raise HTTPException(status_code=403, detail="forbidden")
+    
+    if not event_ids:
+        raise HTTPException(status_code=400, detail="ids cannot be empty")
+    
+    return await forward_best_events(event_ids=event_ids)
