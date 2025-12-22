@@ -86,7 +86,7 @@ export class EventService {
 
       return events;
     } catch (error: unknown) {
-      logger.error('Error fetching events from Gateway API, trying local API and mocks:', error);
+      logger.error('Error fetching events from Gateway API, trying local API:', error);
       
       // При ошибке Gateway API пробуем локальные события
       if (this.localApi && this.localApi.getEventCount() > 0) {
@@ -97,9 +97,15 @@ export class EventService {
         }
       }
 
-      // Последний fallback - моковые данные
-      logger.debug(`Using mock data as fallback${type ? ` (type: ${type})` : ''}`);
-      return this.filterMockEventsByType(MOCK_EVENTS, type);
+      // Fallback на моковые данные только если useMockData=true
+      if (this.useMockData) {
+        logger.debug(`Using mock data as fallback${type ? ` (type: ${type})` : ''}`);
+        return this.filterMockEventsByType(MOCK_EVENTS, type);
+      }
+
+      // Если useMockData=false и API недоступен, возвращаем пустой массив
+      logger.warn(`Gateway API unavailable and mock data disabled. Returning empty array.`);
+      return [];
     }
   }
 
@@ -148,31 +154,39 @@ export class EventService {
     now.setHours(0, 0, 0, 0);
 
     return events.filter(event => {
-      const eventDate = new Date(event.date_preview);
-      eventDate.setHours(0, 0, 0, 0);
+      // Проверяем все даты из date_list, а не только date_preview
+      // Если хотя бы одна дата попадает в фильтр - событие показываем
+      const eventDates = event.date_list.length > 0 
+        ? event.date_list 
+        : [event.date_preview]; // fallback на date_preview если date_list пуст
 
-      switch (dateFilter) {
-        case 'today':
-          return eventDate.getTime() === now.getTime();
-        
-        case 'tomorrow':
-          const tomorrow = new Date(now);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          return eventDate.getTime() === tomorrow.getTime();
-        
-        case 'week':
-          const weekLater = new Date(now);
-          weekLater.setDate(weekLater.getDate() + 7);
-          return eventDate >= now && eventDate <= weekLater;
-        
-        case 'month':
-          const monthLater = new Date(now);
-          monthLater.setMonth(monthLater.getMonth() + 1);
-          return eventDate >= now && eventDate <= monthLater;
-        
-        default:
-          return true;
-      }
+      return eventDates.some(dateStr => {
+        const eventDate = new Date(dateStr);
+        eventDate.setHours(0, 0, 0, 0);
+
+        switch (dateFilter) {
+          case 'today':
+            return eventDate.getTime() === now.getTime();
+          
+          case 'tomorrow':
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return eventDate.getTime() === tomorrow.getTime();
+          
+          case 'week':
+            const weekLater = new Date(now);
+            weekLater.setDate(weekLater.getDate() + 7);
+            return eventDate >= now && eventDate <= weekLater;
+          
+          case 'month':
+            const monthLater = new Date(now);
+            monthLater.setMonth(monthLater.getMonth() + 1);
+            return eventDate >= now && eventDate <= monthLater;
+          
+          default:
+            return true;
+        }
+      });
     });
   }
 

@@ -11,8 +11,10 @@ import { logger } from './utils/logger';
 dotenv.config();
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
-// Если USE_MOCK_DATA=true или GATEWAY_URL не указан - используем моки
-const useMockData = process.env.USE_MOCK_DATA === 'true' || !process.env.GATEWAY_URL;
+// Если USE_MOCK_DATA=true - используем моки
+// Если GATEWAY_URL не указан И USE_MOCK_DATA не установлен - используем моки (для обратной совместимости)
+const useMockData = process.env.USE_MOCK_DATA === 'true' || 
+  (process.env.USE_MOCK_DATA === undefined && !process.env.GATEWAY_URL);
 const gatewayUrl = process.env.GATEWAY_URL || 'http://gateway:8000';
 const redisUrl = process.env.REDIS_URL;
 const cacheTtl = parseInt(process.env.CACHE_TTL_SECONDS || '1800', 10);
