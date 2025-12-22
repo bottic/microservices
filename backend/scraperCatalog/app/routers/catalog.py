@@ -96,6 +96,7 @@ async def post_best_events(
         if event.uuid in existing_uuids:
             continue
         best_event = BestEvents(
+            id = event.id,
             uuid=event.uuid,
             source_id=event.source_id,
             title=event.title,
@@ -128,3 +129,30 @@ async def post_best_events(
         "skipped_existing_uuids": [str(uuid) for uuid in existing_uuids],
         "not_found_ids": not_found_ids,
     }
+
+@router.get("/best-events", response_model=List[EventRead])
+async def list_best_events(
+    event_type: str | None = Query(None, alias="type", description="Event type"),
+    event_id: int | None = Query(None, alias="id", description="Event ID"),
+    db: AsyncSession = Depends(get_db)
+    ):
+
+    query = select(BestEvents)
+
+    if event_type is not None:
+        normalized = event_type.lower()
+        if normalized not in TYPE_MODEL_MAP:
+            raise HTTPException(status_code=404, detail="unsupported event type")
+        
+        query = select(BestEvents).where(BestEvents.event_type == normalized)
+
+    if event_id is not None:
+        query = query.where(BestEvents.id == event_id)
+    
+    result = await db.execute(query)
+    events = result.scalars().all() 
+
+    if event_id is not None and not events:
+        raise HTTPException(status_code=404, detail="event not found")
+    
+    return [EventRead.model_validate(event) for event in events]

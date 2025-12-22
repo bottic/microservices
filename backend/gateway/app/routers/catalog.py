@@ -36,6 +36,34 @@ async def list_active_events(
 
     return payload
 
+@router.get("/events/best")
+async def list_best_events(
+    event_id: int | None = Query(None, alias="id", description="Event ID"),
+    event_type: str | None = Query(None, alias="type", description="Event type"),
+):
+    params = {}
+    if event_type is not None:
+        params["type"] = event_type.lower()
+    if event_id is not None:
+        params["id"] = event_id
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.catalog_service_url}/catalog/events/best", params=params)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, detail=f"catalog unavailable: {exc}") from exc
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = resp.text
+
+    if not resp.is_success:
+        detail = payload.get("detail") if isinstance(payload, dict) else payload
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    return payload
+
 @router.get("/events/nearest")
 async def list_nearest_events(
     event_type: str | None = Query(None, alias="type", description="Event type"),

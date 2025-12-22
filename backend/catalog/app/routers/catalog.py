@@ -5,7 +5,11 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query, Body
 from app.config import settings
 from app.core.redis import get_cached_events, cache_events, get_cached_event_by_id
-from app.core.fetch_events import fetch_events_from_scrapercatalog, fetch_event_from_scrapercatalog_by_id
+from app.core.fetch_events import (
+    fetch_events_from_scrapercatalog,
+    fetch_event_from_scrapercatalog_by_id,
+    fetch_best_events_from_scrapercatalog,
+)
 from app.core.best_evenst import forward_best_events
 from app.schemas.event import EventRead
 
@@ -105,6 +109,21 @@ async def get_nearest_events(
         scope = t
     return await _get_nearest_events(scope=scope, limit=limit)
 
+@router.get("/events/best", response_model=List[EventRead])
+async def get_best_events(
+    event_id: int | None = Query(None, alias="id", description="Event ID"),
+    event_type: str | None = Query(None, alias="type", description="Event type"),
+):
+    normalized_type = None
+    if event_type is not None:
+        normalized_type = event_type.lower()
+        if normalized_type not in SUPPORTED_TYPES:
+            raise HTTPException(status_code=404, detail="unsupported event type")
+
+    return await fetch_best_events_from_scrapercatalog(
+        event_type=normalized_type,
+        event_id=event_id,
+    )
 
 @router.post("/events/post-best")
 async def post_best_events(
