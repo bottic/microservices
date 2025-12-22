@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, Body
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -35,7 +34,7 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def decode_token_sub(token: str, invalid_detail: str) -> UUID:
+def decode_token_sub(token: str, invalid_detail: str) -> int:
     try:
         payload = jwt.decode(
             token,
@@ -45,7 +44,7 @@ def decode_token_sub(token: str, invalid_detail: str) -> UUID:
         sub = payload.get("sub")
         if sub is None:
             raise JWTError("Missing sub")
-        return UUID(sub)
+        return int(sub)
     except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -53,7 +52,7 @@ def decode_token_sub(token: str, invalid_detail: str) -> UUID:
         )
 
 
-async def get_user_by_id(user_id: UUID, db: AsyncSession) -> User:
+async def get_user_by_id(user_id: int, db: AsyncSession) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:

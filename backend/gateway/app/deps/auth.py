@@ -9,7 +9,7 @@ security = HTTPBearer()  # required bearer auth, shows up in OpenAPI
 
 
 class TokenPayload(BaseModel):
-    sub: str  # user_id
+    sub: int  # user_id
     exp: int  # timestamp, но мы его здесь не проверяем руками (делает jose)
     # сюда можно добавить роли и т.п.
 

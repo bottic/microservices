@@ -55,7 +55,7 @@ async def _get_events(scope: str) -> List[EventRead]:
 
 async def _get_event_by_id(event_id: int, scope: str, ) -> EventRead:
     cached_event = await get_cached_event_by_id(event_id=event_id, scope=scope)
-    if cached_event is not None and len(cached_event) > 0:
+    if cached_event is not None:
         return cached_event
 
     events = await fetch_event_from_scrapercatalog_by_id(event_id=event_id, event_type=scope)
