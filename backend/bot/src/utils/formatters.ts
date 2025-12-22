@@ -62,9 +62,9 @@ export function formatEventMessage(event: Event): string {
     message += `👤 <b>Возраст:</b> ${escapeHtml(event.age)}\n`;
   }
 
-  if (event.url) {
-    message += `\n🔗 <a href="${event.url}">Подробнее</a>`;
-  }
+  // Формируем ссылку "Подробнее" на основе UUID
+  const eventUrl = event.url || `https://oxluma.space/event/${event.uuid}`;
+  message += `\n🔗 <a href="${eventUrl}">Подробнее</a>`;
 
   return message;
 }
