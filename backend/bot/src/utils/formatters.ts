@@ -76,9 +76,9 @@ export function formatEventsList(events: Event[]): string {
 
   let message = '';
 
-  const limitedEvents = events.slice(0, 10);
-  
-  limitedEvents.forEach((event, index) => {
+  // Не ограничиваем события здесь - пагинация уже применена в botHandlers
+  // Просто форматируем все переданные события
+  events.forEach((event, index) => {
     const date = new Date(event.date_preview);
     const formattedDate = date.toLocaleString('ru-RU', {
       day: '2-digit',
@@ -100,14 +100,10 @@ export function formatEventsList(events: Event[]): string {
     }
     
     // Добавляем разделитель между событиями (кроме последнего)
-    if (index < limitedEvents.length - 1) {
+    if (index < events.length - 1) {
       message += `\n`;
     }
   });
-
-  if (events.length > 10) {
-    message += `\n\n<i>... и еще ${events.length - 10} событий</i>`;
-  }
 
   return message;
 }
