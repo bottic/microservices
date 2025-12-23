@@ -17,7 +17,7 @@ export class BotHandlers {
   private userFilters: Map<number, EventsFilterState> = new Map();
   // Храним состояние пагинации для каждого пользователя (индекс последней показанной страницы)
   private userPagination: Map<number, number> = new Map();
-  private readonly EVENTS_PER_PAGE = 5;
+  private readonly EVENTS_PER_PAGE = 10;
 
   constructor(
     private bot: Bot,
@@ -369,27 +369,14 @@ export class BotHandlers {
       const startIndex = currentPage * this.EVENTS_PER_PAGE;
       const endIndex = startIndex + this.EVENTS_PER_PAGE;
       const paginatedEvents = filteredEvents.slice(startIndex, endIndex);
+      
+      logger.debug(`Pagination: total=${filteredEvents.length}, page=${currentPage + 1}/${totalPages}, showing=${paginatedEvents.length} events`);
 
-      // Формируем текст с информацией о фильтрах
-      let headerText = `<b>📅 Ближайшие события</b> <i>(${filteredEvents.length})</i>`;
-      if (filters.dateFilter || filters.priceFilter || filters.eventType) {
-        headerText += '\n\n<b>Фильтры:</b>';
-        if (filters.eventType) {
-          headerText += `\n🎯 ${EVENT_TYPE_LABELS[filters.eventType]}`;
-        }
-        if (filters.dateFilter) {
-          headerText += `\n📅 ${this.getDateFilterLabel(filters.dateFilter)}`;
-        }
-        if (filters.priceFilter) {
-          headerText += `\n💰 ${this.getPriceFilterLabel(filters.priceFilter)}`;
-        }
-      }
+      // Формируем текст без заголовка (только список событий)
+      const formattedText = formatEventsList(paginatedEvents);
       
-      const formattedText = headerText + '\n\n' + formatEventsList(paginatedEvents);
-      
-      // Создаем клавиатуру с пагинацией и фильтрами
-      const hasActiveFilters = !!(filters.dateFilter || filters.priceFilter || filters.eventType);
-      const keyboard = this.createPaginationKeyboard(currentPage, totalPages, hasActiveFilters);
+      // Основное сообщение без кнопок (только список событий)
+      const keyboard = new InlineKeyboard();
       
       const targetMessageId = messageId || loadingMessageId;
       
@@ -455,16 +442,16 @@ export class BotHandlers {
         }
       }
 
-      // Показываем кнопку "Главное Меню" только в конце списка
-      const endKeyboard = new InlineKeyboard()
-        .text('Главное Меню', 'back_to_menu');
+      // Показываем кнопки пагинации, фильтры и "Главное Меню" в конце списка
+      const hasActiveFilters = !!(filters.dateFilter || filters.priceFilter || filters.eventType);
+      const endKeyboard = this.createPaginationEndKeyboard(currentPage, totalPages, hasActiveFilters);
       
       if (filteredEvents.length > endIndex) {
         await ctx.reply(`И еще ${filteredEvents.length - endIndex} событий.`, {
           reply_markup: endKeyboard,
         });
       } else {
-        // Если это последняя страница, показываем кнопку "Назад" в конце
+        // Если это последняя страница, показываем кнопки пагинации и "Главное Меню"
         await ctx.reply('Это все события.', {
           reply_markup: endKeyboard,
         });
@@ -705,8 +692,21 @@ export class BotHandlers {
     return keyboard;
   }
 
-  // Создание клавиатуры пагинации
-  private createPaginationKeyboard(
+  // Создание клавиатуры только с фильтрами (без пагинации)
+  private createFiltersOnlyKeyboard(hasActiveFilters: boolean): InlineKeyboard {
+    const keyboard = new InlineKeyboard();
+    
+    keyboard.text('⚙️ Фильтры', 'show_filters').row();
+    
+    if (hasActiveFilters) {
+      keyboard.text('🔄 Сбросить фильтры', 'filter_reset').row();
+    }
+    
+    return keyboard;
+  }
+
+  // Создание клавиатуры пагинации для конца списка
+  private createPaginationEndKeyboard(
     currentPage: number,
     totalPages: number,
     hasActiveFilters: boolean
@@ -731,7 +731,7 @@ export class BotHandlers {
       keyboard.text('🔄 Сбросить фильтры', 'filter_reset').row();
     }
     
-    keyboard.text('⬅️ Назад', 'back_to_menu');
+    keyboard.text('Главное Меню', 'back_to_menu');
     
     return keyboard;
   }
